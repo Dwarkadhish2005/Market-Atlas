@@ -41,21 +41,18 @@ const analystSchema = z.object({
   strengths: z
     .array(z.string())
     .min(1)
-    .max(4)
-    .describe("Top 1–4 evidence-grounded strengths"),
+    // No .max() here — Groq rejects responses that exceed it. We clamp in code instead.
+    .describe("Top evidence-grounded strengths (aim for 3–4)"),
   weaknesses: z
     .array(z.string())
     .min(1)
-    .max(4)
-    .describe("Top 1–4 evidence-grounded weaknesses or gaps"),
+    .describe("Top evidence-grounded weaknesses or gaps (aim for 3–4)"),
   evidenceIds: z
     .array(z.string())
     .min(1)
-    .max(6)
-    .describe("Source IDs supporting conclusions, e.g. ['S1','S4']. Max 6."),
+    .describe("Source IDs supporting conclusions, e.g. ['S1','S4']. Aim for 5–6 most relevant."),
   flags: z
     .array(flagSchema)
-    .max(3)
     .describe("HIGH = thesis-breaking risk only. MEDIUM = notable concern. Omit if none."),
 });
 
@@ -242,7 +239,18 @@ export async function runLiveAnalysis(
         );
       }
 
-      const result: AnalystResult = { key, name: config.name, ...output };
+      // Clamp arrays to safe limits after receiving the response.
+      // We do this in code rather than via Zod .max() because Groq enforces
+      // schema limits server-side and rejects responses that exceed them.
+      const result: AnalystResult = {
+        key,
+        name: config.name,
+        ...output,
+        strengths: output.strengths.slice(0, 4),
+        weaknesses: output.weaknesses.slice(0, 4),
+        evidenceIds: output.evidenceIds.slice(0, 8),
+        flags: output.flags.slice(0, 3),
+      };
 
       await report({
         type: "progress",
