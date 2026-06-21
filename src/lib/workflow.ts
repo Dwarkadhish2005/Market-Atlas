@@ -77,6 +77,52 @@ const committeeSchema = z.object({
 
 type Reporter = (event: ProgressEvent) => void | Promise<void>;
 
+// ─── Rate-limit helpers ──────────────────────────────────────────────────────
+
+/** Pause execution for `ms` milliseconds. */
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+/**
+ * Parse the retry-after seconds from a Groq 429 error message.
+ * e.g. "Please try again in 7.914999999s"
+ */
+function parseRetryAfterMs(message: string): number {
+  const match = message.match(/try again in ([\d.]+)s/);
+  if (match) {
+    return Math.ceil(parseFloat(match[1]) * 1000) + 500; // +500 ms buffer
+  }
+  return 15_000; // default 15 s if we can't parse
+}
+
+/**
+ * Invoke `fn` with automatic retry on Groq 429 rate-limit errors.
+ * Reads the exact wait time from the error body so we don't over-wait.
+ */
+async function retryOnRateLimit<T>(
+  fn: () => Promise<T>,
+  maxRetries = 3,
+): Promise<T> {
+  let attempt = 0;
+  while (true) {
+    try {
+      return await fn();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      const is429 = message.includes("429") || message.includes("rate_limit_exceeded");
+      if (is429 && attempt < maxRetries) {
+        const waitMs = parseRetryAfterMs(message);
+        console.warn(
+          `[Market Atlas] Rate limit hit — waiting ${waitMs}ms before retry ${attempt + 1}/${maxRetries}`,
+        );
+        await sleep(waitMs);
+        attempt++;
+        continue;
+      }
+      throw err;
+    }
+  }
+}
+
 // ─── System prompts ──────────────────────────────────────────────────────────
 
 function buildAnalystSystemPrompt(key: AnalystKey): string {
@@ -181,50 +227,62 @@ export async function runLiveAnalysis(
 
   // ── Analyst node factory ───────────────────────────────────────────────────
 
-  const analystNode = (key: AnalystKey) => async (state: typeof State.State) => {
-    const config = ANALYST_CONFIG[key];
+  /**
+   * @param key        Which analyst dimension to run
+   * @param staggerMs  Initial delay before the first LLM call — staggers
+   *                   parallel nodes so they don't all hit the API at once.
+   */
+  const analystNode =
+    (key: AnalystKey, staggerMs = 0) =>
+    async (state: typeof State.State) => {
+      const config = ANALYST_CONFIG[key];
 
-    await report({
-      type: "progress",
-      step: key,
-      message: `${config.name} reviewing ${state.sources.length} sources`,
-      status: "running",
-    });
+      // Stagger parallel analysts to avoid simultaneous token bursts
+      if (staggerMs > 0) await sleep(staggerMs);
 
-    const evidence = state.sources
-      .map((s) => `[${s.id}] ${s.title}\n${s.snippet}${s.url ? `\nURL: ${s.url}` : ""}`)
-      .join("\n\n---\n\n");
+      await report({
+        type: "progress",
+        step: key,
+        message: `${config.name} reviewing ${state.sources.length} sources`,
+        status: "running",
+      });
 
-    const structured = model.withStructuredOutput(analystSchema, {
-      name: `${key}_analysis`,
-    });
+      const evidence = state.sources
+        .map((s) => `[${s.id}] ${s.title}\n${s.snippet}${s.url ? `\nURL: ${s.url}` : ""}`)
+        .join("\n\n---\n\n");
 
-    let output;
-    try {
-      output = await structured.invoke([
-        ["system", buildAnalystSystemPrompt(key)],
-        [
-          "human",
-          `Company under review: **${state.company}**\n\nEvidence repository (${state.sources.length} sources):\n\n${evidence}\n\nProvide your full analyst report now.`,
-        ],
-      ]);
-    } catch (err) {
-      throw new Error(
-        `${config.name} failed: ${err instanceof Error ? err.message : String(err)}`,
-      );
-    }
+      const structured = model.withStructuredOutput(analystSchema, {
+        name: `${key}_analysis`,
+      });
 
-    const result: AnalystResult = { key, name: config.name, ...output };
+      let output;
+      try {
+        output = await retryOnRateLimit(() =>
+          structured.invoke([
+            ["system", buildAnalystSystemPrompt(key)],
+            [
+              "human",
+              `Company under review: **${state.company}**\n\nEvidence repository (${state.sources.length} sources):\n\n${evidence}\n\nProvide your full analyst report now.`,
+            ],
+          ]),
+        );
+      } catch (err) {
+        throw new Error(
+          `${config.name} failed: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
 
-    await report({
-      type: "progress",
-      step: key,
-      message: `${config.name} complete — score: ${output.score.toFixed(1)}/10`,
-      status: "complete",
-    });
+      const result: AnalystResult = { key, name: config.name, ...output };
 
-    return { analystResults: [result] };
-  };
+      await report({
+        type: "progress",
+        step: key,
+        message: `${config.name} complete — score: ${output.score.toFixed(1)}/10`,
+        status: "complete",
+      });
+
+      return { analystResults: [result] };
+    };
 
   // ── Committee node ─────────────────────────────────────────────────────────
 
@@ -276,13 +334,16 @@ export async function runLiveAnalysis(
 
   // ── Build and run graph ────────────────────────────────────────────────────
 
+  // Stagger each analyst by 3 s so parallel nodes don't all burst tokens at once.
+  // Even on Groq's free tier (12k TPM) this keeps each 60-s window under budget.
+  const STAGGER_MS = 3_000;
   const graph = new StateGraph(State)
     .addNode("research", researchNode)
-    .addNode("business", analystNode("business"))
-    .addNode("market", analystNode("market"))
-    .addNode("product", analystNode("product"))
-    .addNode("sentiment", analystNode("sentiment"))
-    .addNode("risk", analystNode("risk"))
+    .addNode("business", analystNode("business", 0 * STAGGER_MS))
+    .addNode("market",   analystNode("market",   1 * STAGGER_MS))
+    .addNode("product",  analystNode("product",  2 * STAGGER_MS))
+    .addNode("sentiment",analystNode("sentiment",3 * STAGGER_MS))
+    .addNode("risk",     analystNode("risk",     4 * STAGGER_MS))
     .addNode("committee", committeeNode)
     .addEdge(START, "research")
     .addEdge("research", "business")
