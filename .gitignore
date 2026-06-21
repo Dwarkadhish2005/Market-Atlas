@@ -10,3 +10,5 @@ coverage/
 tmp/
 .agents/
 .pnpm-store/
+.venv/
+venv/
