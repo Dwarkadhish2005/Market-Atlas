@@ -15,7 +15,7 @@ interface TavilyResponse {
 
 const TAVILY_ENDPOINT = "https://api.tavily.com/search";
 const REQUEST_TIMEOUT_MS = 30_000;
-const MAX_SOURCES = 20;
+const MAX_SOURCES = 10;  // reduced from 20 to cut LLM input tokens
 const MIN_SOURCES = 5;
 
 /**
@@ -59,7 +59,7 @@ async function fetchTavily(
       api_key: apiKey,
       query,
       search_depth: "advanced",
-      max_results: 7,
+      max_results: 4,  // reduced from 7 — fewer but higher-quality results
       include_answer: false,
       include_raw_content: false,
       topic,
@@ -142,7 +142,7 @@ export async function collectResearch(company: string): Promise<Source[]> {
     id: `S${index + 1}`,
     title: result.title,
     url: result.url,
-    snippet: result.content.slice(0, 1200), // richer snippets for better LLM reasoning
+    snippet: result.content.slice(0, 400), // trimmed from 1200 to 400 chars to save tokens
     publishedDate: result.published_date,
     score: result.score,
   }));

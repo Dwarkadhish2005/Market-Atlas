@@ -29,47 +29,41 @@ const analystSchema = z.object({
     .number()
     .min(0)
     .max(10)
-    .describe("Score from 0–10. 10 = exceptional, 5 = average, 0 = disqualifying"),
+    .describe("Score 0–10. 10=exceptional, 5=average, 0=disqualifying"),
   confidence: z
     .number()
     .min(0)
     .max(1)
-    .describe(
-      "Confidence in your score. Reduce when evidence is sparse, old, indirect, or contradictory",
-    ),
+    .describe("Confidence in score. Lower when evidence is sparse or contradictory"),
   summary: z
     .string()
-    .describe(
-      "100–150 word analytical summary. State your thesis, evidence, and the key variable that most determines your score",
-    ),
+    .describe("50–70 word analytical summary. State thesis, key evidence, and decisive variable"),
   strengths: z
     .array(z.string())
     .min(1)
-    .max(6)
-    .describe("Specific, evidence-grounded strengths (not generic platitudes)"),
+    .max(4)
+    .describe("Top 1–4 evidence-grounded strengths"),
   weaknesses: z
     .array(z.string())
     .min(1)
-    .max(6)
-    .describe("Specific, evidence-grounded weaknesses or gaps"),
+    .max(4)
+    .describe("Top 1–4 evidence-grounded weaknesses or gaps"),
   evidenceIds: z
     .array(z.string())
     .min(1)
-    .max(12)
-    .describe("IDs of sources that directly support your conclusions, e.g. ['S1', 'S4']"),
+    .max(6)
+    .describe("Source IDs supporting conclusions, e.g. ['S1','S4']. Max 6."),
   flags: z
     .array(flagSchema)
-    .max(5)
-    .describe(
-      "Raise a HIGH flag only for potentially thesis-breaking risks. MEDIUM for notable concerns. Leave empty if no material risks",
-    ),
+    .max(3)
+    .describe("HIGH = thesis-breaking risk only. MEDIUM = notable concern. Omit if none."),
 });
 
 const committeeSchema = z.object({
   committeeSummary: z
     .string()
     .describe(
-      "120–180 word synthesis. Identify agreements, disagreements, and the 2–3 decisive variables. Do NOT state the verdict or recalculate scores",
+      "80–100 word synthesis. Agreements, disagreements, and 2 decisive variables. No verdict, no scores.",
     ),
 });
 
@@ -127,40 +121,16 @@ async function retryOnRateLimit<T>(
 
 function buildAnalystSystemPrompt(key: AnalystKey): string {
   const config = ANALYST_CONFIG[key];
-  const base = `You are the ${config.name} on a professional investment committee.
-
-Your sole job: evaluate **${config.focus}** for the company under review.
-
-Rules you must follow without exception:
-1. Ground every score, strength, weakness, and flag in specific evidence from the supplied sources.
-2. Cite source IDs (e.g. S1, S4) in your evidenceIds array — do not cite IDs that don't appear in the evidence.
-3. Never invent metrics, quotes, valuations, or facts. If a fact isn't in the sources, say so.
-4. Calibrate confidence honestly: low evidence → lower confidence. Do not fake certainty.
-5. A HIGH flag must represent a potentially thesis-breaking risk — not a generic concern.
-6. Scores must be defensible. A score of 8+ requires strong positive evidence, not absence of negatives.
-7. Write analytically. Avoid filler phrases like "it is worth noting" or "it's important to consider".`;
+  const base = `You are the ${config.name} on an investment committee. Evaluate **${config.focus}** for the company under review.
+Rules: cite only source IDs present in the evidence; never invent facts; keep summary under 70 words; be direct.`;
 
   if (key === "risk") {
-    return (
-      base +
-      "\n\nIMPORTANT for Risk: Your score is INVERSE — 10 = lowest risk, 0 = highest risk. A score of 8 means you found strong evidence that risks are well-managed and manageable. A score of 2 means the risk profile is severe and may be disqualifying."
-    );
+    return base + " Score is INVERSE: 10=lowest risk, 0=highest risk.";
   }
-
   return base;
 }
 
-const COMMITTEE_SYSTEM = `You chair an investment committee reviewing analyst reports.
-
-Your job: synthesise the findings into a coherent committee view.
-
-Rules:
-1. Identify where analysts agree and where they diverge.
-2. Name the 2–3 variables that are most decisive for the investment case.
-3. Reflect the weight of evidence — do not average or summarise mechanically.
-4. Write in 120–180 words. Be direct and specific.
-5. Do NOT state BUY/WATCH/PASS. Do NOT recalculate or restate individual scores.
-6. The deterministic scoring engine will determine the final verdict — your job is synthesis, not decision-making.`;
+const COMMITTEE_SYSTEM = `You chair an investment committee. Synthesise analyst reports in 80–100 words: note agreements, disagreements, and the 2 decisive variables. No verdict. No scores.`;
 
 // ─── Graph ───────────────────────────────────────────────────────────────────
 
