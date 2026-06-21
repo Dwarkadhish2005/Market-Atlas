@@ -45,17 +45,17 @@ const analystSchema = z.object({
   strengths: z
     .array(z.string())
     .min(1)
-    .max(4)
+    .max(6)
     .describe("Specific, evidence-grounded strengths (not generic platitudes)"),
   weaknesses: z
     .array(z.string())
     .min(1)
-    .max(4)
+    .max(6)
     .describe("Specific, evidence-grounded weaknesses or gaps"),
   evidenceIds: z
     .array(z.string())
     .min(1)
-    .max(8)
+    .max(12)
     .describe("IDs of sources that directly support your conclusions, e.g. ['S1', 'S4']"),
   flags: z
     .array(flagSchema)
