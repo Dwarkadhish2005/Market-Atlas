@@ -18,9 +18,7 @@ export async function POST(request: Request) {
   if (!process.env.GROQ_API_KEY || !process.env.TAVILY_API_KEY) {
     return Response.json(
       {
-        error:
-          "Live analysis requires GROQ_API_KEY and TAVILY_API_KEY to be configured in .env.local. " +
-          "Please add your API keys and restart the dev server.",
+        error: "Live analysis requires GROQ_API_KEY and TAVILY_API_KEY environment variables.",
       },
       { status: 503 },
     );

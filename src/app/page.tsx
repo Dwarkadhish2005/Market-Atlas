@@ -38,8 +38,6 @@ import {
   type ProgressEvent,
 } from "@/types/analysis";
 
-// ─── Constants ────────────────────────────────────────────────────────────────
-
 const ANALYSIS_STEPS = [
   { key: "research", label: "Evidence collection", icon: Globe2 },
   { key: "business", label: "Business quality", icon: Building2 },
@@ -56,8 +54,6 @@ const EXAMPLE_COMPANIES = ["Stripe", "NVIDIA", "Zerodha", "Anthropic", "Reliance
 const CLIENT_TIMEOUT_MS = 105_000; // 105s — just under server's 120s limit
 
 type Tab = "overview" | "analysts" | "evidence" | "memo";
-
-// ─── Root page ────────────────────────────────────────────────────────────────
 
 export default function Home() {
   const [company, setCompany] = useState("");

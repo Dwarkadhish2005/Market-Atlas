@@ -12,7 +12,7 @@ import {
   type Source,
 } from "@/types/analysis";
 
-// ─── Zod schemas ─────────────────────────────────────────────────────────────
+// Schemas
 
 const flagSchema = z.object({
   code: z
@@ -64,19 +64,11 @@ const committeeSchema = z.object({
     ),
 });
 
-// ─── Types ───────────────────────────────────────────────────────────────────
-
 type Reporter = (event: ProgressEvent) => void | Promise<void>;
 
-// ─── Rate-limit helpers ──────────────────────────────────────────────────────
-
-/** Pause execution for `ms` milliseconds. */
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
-/**
- * Parse the retry-after seconds from a Groq 429 error message.
- * e.g. "Please try again in 7.914999999s"
- */
+// Parse the retry-after wait time from a Groq 429 error message.
 function parseRetryAfterMs(message: string): number {
   const match = message.match(/try again in ([\d.]+)s/);
   if (match) {
@@ -85,10 +77,6 @@ function parseRetryAfterMs(message: string): number {
   return 15_000; // default 15 s if we can't parse
 }
 
-/**
- * Invoke `fn` with automatic retry on Groq 429 rate-limit errors.
- * Reads the exact wait time from the error body so we don't over-wait.
- */
 async function retryOnRateLimit<T>(
   fn: () => Promise<T>,
   maxRetries = 3,
@@ -114,7 +102,7 @@ async function retryOnRateLimit<T>(
   }
 }
 
-// ─── System prompts ──────────────────────────────────────────────────────────
+// System prompts
 
 function buildAnalystSystemPrompt(key: AnalystKey): string {
   const config = ANALYST_CONFIG[key];
@@ -129,7 +117,7 @@ Rules: cite only source IDs present in the evidence; never invent facts; keep su
 
 const COMMITTEE_SYSTEM = `You chair an investment committee. Synthesise analyst reports in 80–100 words: note agreements, disagreements, and the 2 decisive variables. No verdict. No scores.`;
 
-// ─── Graph ───────────────────────────────────────────────────────────────────
+// Graph
 
 export async function runLiveAnalysis(
   company: string,
@@ -163,7 +151,7 @@ export async function runLiveAnalysis(
     maxRetries: 2,
   });
 
-  // ── Research node ──────────────────────────────────────────────────────────
+  // Research node
 
   const researchNode = async (state: typeof State.State) => {
     await report({
@@ -192,19 +180,12 @@ export async function runLiveAnalysis(
     return { sources };
   };
 
-  // ── Analyst node factory ───────────────────────────────────────────────────
-
-  /**
-   * @param key        Which analyst dimension to run
-   * @param staggerMs  Initial delay before the first LLM call — staggers
-   *                   parallel nodes so they don't all hit the API at once.
-   */
+  // Analyst node factory
   const analystNode =
     (key: AnalystKey, staggerMs = 0) =>
     async (state: typeof State.State) => {
       const config = ANALYST_CONFIG[key];
 
-      // Stagger parallel analysts to avoid simultaneous token bursts
       if (staggerMs > 0) await sleep(staggerMs);
 
       await report({
@@ -239,9 +220,7 @@ export async function runLiveAnalysis(
         );
       }
 
-      // Clamp arrays to safe limits after receiving the response.
-      // We do this in code rather than via Zod .max() because Groq enforces
-      // schema limits server-side and rejects responses that exceed them.
+      // Clamp arrays — Groq enforces schema limits server-side so we trim in code.
       const result: AnalystResult = {
         key,
         name: config.name,
@@ -262,7 +241,7 @@ export async function runLiveAnalysis(
       return { analystResults: [result] };
     };
 
-  // ── Committee node ─────────────────────────────────────────────────────────
+  // Committee node
 
   const committeeNode = async (state: typeof State.State) => {
     await report({
@@ -310,10 +289,7 @@ export async function runLiveAnalysis(
     return output;
   };
 
-  // ── Build and run graph ────────────────────────────────────────────────────
-
-  // Stagger each analyst by 3 s so parallel nodes don't all burst tokens at once.
-  // Even on Groq's free tier (12k TPM) this keeps each 60-s window under budget.
+  // Stagger analyst nodes to stay within API rate limits.
   const STAGGER_MS = 3_000;
   const graph = new StateGraph(State)
     .addNode("research", researchNode)
@@ -335,7 +311,7 @@ export async function runLiveAnalysis(
 
   const finalState = await graph.invoke({ company });
 
-  // Validate all analysts returned results
+  // Confirm all analyst nodes returned results
   const analysts = Object.fromEntries(
     finalState.analystResults.map((r) => [r.key, r]),
   ) as Record<AnalystKey, AnalystResult>;

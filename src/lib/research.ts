@@ -15,13 +15,9 @@ interface TavilyResponse {
 
 const TAVILY_ENDPOINT = "https://api.tavily.com/search";
 const REQUEST_TIMEOUT_MS = 30_000;
-const MAX_SOURCES = 10;  // reduced from 20 to cut LLM input tokens
+const MAX_SOURCES = 10;
 const MIN_SOURCES = 5;
 
-/**
- * Build targeted search queries for each analytical dimension.
- * More specific queries produce higher-quality, less overlapping evidence.
- */
 function buildQueries(company: string): Array<{ query: string; topic: "general" | "news" }> {
   return [
     {
@@ -59,7 +55,7 @@ async function fetchTavily(
       api_key: apiKey,
       query,
       search_depth: "advanced",
-      max_results: 4,  // reduced from 7 — fewer but higher-quality results
+      max_results: 4,
       include_answer: false,
       include_raw_content: false,
       topic,
@@ -81,10 +77,6 @@ async function fetchTavily(
   return data.results ?? [];
 }
 
-/**
- * Collect and deduplicate evidence for a company across all 5 analytical dimensions.
- * Returns up to MAX_SOURCES sources ranked by relevance score.
- */
 export async function collectResearch(company: string): Promise<Source[]> {
   const apiKey = process.env.TAVILY_API_KEY;
   if (!apiKey) throw new Error("TAVILY_API_KEY is not configured");
@@ -114,9 +106,8 @@ export async function collectResearch(company: string): Promise<Source[]> {
     );
   }
 
-  // Partial failure warning (non-fatal)
   if (errors.length > 0) {
-    console.warn(`[Market Atlas] ${errors.length} Tavily queries failed:`, errors);
+    console.warn(`[research] ${errors.length} Tavily queries failed:`, errors);
   }
 
   // Deduplicate by URL — keep the highest-scoring copy of each URL
@@ -142,7 +133,7 @@ export async function collectResearch(company: string): Promise<Source[]> {
     id: `S${index + 1}`,
     title: result.title,
     url: result.url,
-    snippet: result.content.slice(0, 400), // trimmed from 1200 to 400 chars to save tokens
+    snippet: result.content.slice(0, 400),
     publishedDate: result.published_date,
     score: result.score,
   }));
