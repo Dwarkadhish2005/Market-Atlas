@@ -14,6 +14,7 @@
     "@langchain/core": "^0.3.79",
     "@langchain/groq": "^0.2.3",
     "@langchain/langgraph": "^0.2.74",
+    "@vercel/analytics": "^2.0.1",
     "lucide-react": "^0.468.0",
     "next": "15.5.19",
     "react": "19.0.0",
