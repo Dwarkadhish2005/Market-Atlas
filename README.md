@@ -1,5 +1,7 @@
 # Market Atlas
 
+🚀 **Live Demo:** [https://market-atlas-coral.vercel.app/](https://market-atlas-coral.vercel.app/)
+
 **Market Atlas** is an AI-powered investment research agent that takes a company name as input and produces a structured, analyst-style investment report — complete with a final verdict (BUY / WATCH / PASS), a scored breakdown across five dimensions, key risks and strengths, and cited sources.
 
 It simulates an investment committee made up of five specialized AI analysts, each reviewing live evidence fetched from the web and producing their own scored assessment. A committee chair then synthesizes the views before a deterministic scoring engine locks in the final verdict.
@@ -237,16 +239,8 @@ A detailed analysis covering Aramco's position as the world's largest oil produc
 
 ## What I Would Improve With More Time
 
-1. **Structured financial data ingestion** — Integrate with a financial data API (e.g. Alpha Vantage, Polygon.io) to pull revenue, margins, P/E ratio, and cash flow directly into the analyst context. This would make the Business and Risk scores far more grounded.
+1. **Structured financial data ingestion** — Integrate with a financial data API (e.g. Alpha Vantage, Polygon.io) to pull revenue, margins, P/E ratio, and cash flow directly into the analyst context. This would make the Business and Risk scores far more grounded in real numbers rather than inferred from news and articles.
 
-2. **Source quality scoring** — Not all Tavily results are equal. A pre-filter step that ranks sources by domain authority (e.g. Reuters, SEC filings > random blogs) would improve signal quality significantly.
+2. **Sector-aware analyst prompts** — The same analyst prompts are used for every company regardless of industry. Adapting them to the sector (e.g. a SaaS company vs. a mining company vs. a biotech) would make the evaluation criteria and scoring thresholds far more relevant and precise.
 
-3. **Sector-aware analyst prompts** — The same analyst prompts are used for every company. Adapting them to the sector (e.g. a SaaS company vs. a mining company) would make the evaluation criteria far more relevant.
-
-4. **Peer comparison mode** — Allow users to input multiple companies and see them ranked side-by-side on each dimension, making the BUY/WATCH/PASS verdict more actionable in context.
-
-5. **Explainability improvements** — Show exactly which source IDs drove each analyst score, with clickable inline citations, so users can audit the reasoning behind any claim.
-
-6. **Persistent history with Supabase** — The Supabase env vars are scaffolded but not wired up. Completing this would enable cross-device access, saved portfolios, and watchlist tracking over time.
-
-7. **Streaming analyst outputs** — Currently, each analyst result appears atomically when its LLM call completes. Streaming tokens progressively would make the UI feel significantly more responsive during the 10–20 second analysis window.
+3. **Peer comparison mode** — Allow users to analyze multiple companies simultaneously and see them ranked side-by-side across all five analyst dimensions, making the BUY/WATCH/PASS verdict much more actionable by providing market context.
